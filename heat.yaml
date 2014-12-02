@@ -1,0 +1,97 @@
+heat_template_version: 2013-05-23
+
+description: 'NeCTAR Template for creating a DIT4C containers protected by SSH.'
+
+
+parameters:
+
+  InstanceSize:
+    type: string
+    label: Instance Size
+    description: Size of the instance to be created.
+    default: m1.small
+    constraints:
+      - allowed_values: [m1.small, m1.medium, m1.large, m1.xlarge, m1.xxlarge]
+
+  ImageID:
+    type: string
+    label: Image ID
+    description: ID of the CoreOS image to use for the instance to be created
+    default: c067d1fa-935a-4254-92e8-3b86c46b6c7e
+
+  AvailabilityZone:
+    type: string
+    description: The NeCTAR zone in which the VM is to run
+    default: sa
+    constraints:
+     - allowed_values: [melbourne, monash, sa, qld, NCI, tasmania]
+
+  ContainerImage:
+    type: string
+    description: The Docker container image to use
+    default: dit4c/dit4c-container-ipython
+    constraints:
+     - allowed_values: [dit4c/dit4c-container-ipython, dit4c/dit4c-container-rstudio]
+
+  KeyName:
+    type: string
+    label: Key Name
+    description:
+      SSH key to use for access
+    constraints:
+      - length: { min: 1 }
+
+resources:
+
+  ComputeNodeSecGroup:
+    type: AWS::EC2::SecurityGroup
+    properties:
+      GroupDescription: "Enable proxy and management ports"
+      SecurityGroupIngress:
+        -
+          IpProtocol: "tcp"
+          FromPort: "22"
+          ToPort: "22"
+          CidrIp: "0.0.0.0/0"
+
+
+  ComputeNodeInstance:
+    type: OS::Nova::Server
+    properties:
+      availability_zone: { Ref: AvailabilityZone }
+      image: { Ref: ImageID }
+      flavor: { Ref: InstanceSize }
+      key_name: { Ref: KeyName }
+      security_groups: [{Ref: ComputeNodeSecGroup}]
+      user_data_format: RAW
+      config_drive: "true"
+      user_data:
+        str_replace:
+          template: |
+            #cloud-config
+            coreos:
+              etcd:
+                addr: $private_ipv4:4001
+                peer-addr: $private_ipv4:7001
+              update:
+                reboot-strategy: "off"
+              units:
+              - name: run-dit4c-container.service
+                command: start
+                enable: yes
+                content: |
+                  [Unit]
+                  Description=Setup DIT4C container
+                  After=docker.service
+                  [Service]
+                  Type=oneshot
+                  RemainAfterExit=yes
+                  ExecStart=/bin/bash -c "docker start dit4c-container || docker run -t -p 80:80 --name dit4c-container $containerImage"
+                  ExecStop=/usr/bin/docker stop dit4c-container
+          params:
+            $containerImage: { get_param: ContainerImage }
+
+outputs:
+  InstanceIP:
+    description: Public IP address of the newly created compute node.
+    value: { get_attr: [ComputeNodeInstance, first_address] }
