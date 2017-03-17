@@ -1,7 +1,6 @@
-heat_template_version: 2013-05-23
+heat_template_version: 2016-04-08
 
 description: 'NeCTAR Template for creating a DIT4C containers protected by SSH.'
-
 
 parameters:
 
@@ -9,29 +8,54 @@ parameters:
     type: string
     label: Instance Size
     description: Size of the instance to be created.
-    default: m1.small
+    default: m2.small
     constraints:
-      - allowed_values: [m1.small, m1.medium, m1.large, m1.xlarge, m1.xxlarge]
+      - allowed_values: [m2.xsmall, m2.small, m2.medium]
 
   ImageID:
     type: string
     label: Image ID
     description: ID of the CoreOS image to use for the instance to be created
-    default: c067d1fa-935a-4254-92e8-3b86c46b6c7e
+    default: ab138a79-551b-4f27-a298-80b8857d3a2d
 
   AvailabilityZone:
     type: string
     description: The NeCTAR zone in which the VM is to run
-    default: sa
+    default: melbourne-qh2-uom
     constraints:
-     - allowed_values: [melbourne, monash, sa, qld, NCI, tasmania]
+     - allowed_values: [melbourne-qh2-uom, melbourne, monash, sa, qld, NCI, tasmania]
+
+  NgrokRegion:
+    type: string
+    description: ngrok.com region to connect to
+    default: au
+    constraints:
+     - allowed_values: [ap, au, eu, us]
 
   ContainerImage:
     type: string
     description: The Docker container image to use
-    default: dit4c/dit4c-container-ipython
+    default: "docker://dit4c/dit4c-container-ipython"
     constraints:
-     - allowed_values: [dit4c/dit4c-container-ipython, dit4c/dit4c-container-rstudio]
+     - allowed_values: ["docker://dit4c/dit4c-container-ipython", "docker://dit4c/dit4c-container-nltk", "docker://dit4c/dit4c-container-rstudio", "docker://dit4c/dit4c-container-zeppelin"]
+
+  ContainerPort:
+    type: number
+    description: The HTTP port container services run on
+    default: 8080
+
+  PasswordSecret:
+    type: string
+    label: Password
+    description: "Password to access container (warning: plain text!)"
+    constraints:
+      - allowed_pattern: "[a-zA-Z0-9]+"
+        description: Password can only use alphanumeric characters
+
+  NotifyUrl:
+    type: string
+    label: Notify URL
+    description: URL to notify with POST (eg. https://dweet.io/dweet/for/my-pet-vm-name)
 
   KeyName:
     type: string
@@ -42,27 +66,13 @@ parameters:
       - length: { min: 1 }
 
 resources:
-
-  ComputeNodeSecGroup:
-    type: AWS::EC2::SecurityGroup
-    properties:
-      GroupDescription: "Enable proxy and management ports"
-      SecurityGroupIngress:
-        -
-          IpProtocol: "tcp"
-          FromPort: "22"
-          ToPort: "22"
-          CidrIp: "0.0.0.0/0"
-
-
   ComputeNodeInstance:
     type: OS::Nova::Server
     properties:
-      availability_zone: { Ref: AvailabilityZone }
-      image: { Ref: ImageID }
-      flavor: { Ref: InstanceSize }
-      key_name: { Ref: KeyName }
-      security_groups: [{Ref: ComputeNodeSecGroup}]
+      availability_zone: { get_param: AvailabilityZone }
+      image: { get_param: ImageID }
+      flavor: { get_param: InstanceSize }
+      key_name: { get_param: KeyName }
       user_data_format: RAW
       config_drive: "true"
       user_data:
@@ -70,9 +80,6 @@ resources:
           template: |
             #cloud-config
             coreos:
-              etcd:
-                addr: $private_ipv4:4001
-                peer-addr: $private_ipv4:7001
               update:
                 reboot-strategy: "off"
               units:
@@ -84,14 +91,26 @@ resources:
                   Description=Setup DIT4C container
                   After=docker.service
                   [Service]
-                  Type=oneshot
-                  RemainAfterExit=yes
-                  ExecStart=/bin/bash -c "docker start dit4c-container || docker run -t -p 80:80 --name dit4c-container $containerImage"
-                  ExecStop=/usr/bin/docker stop dit4c-container
+                  Type=simple
+                  ExecStart=/bin/bash -c 'rkt run --dns 8.8.8.8 --insecure-options image https://github.com/dit4c/ngrok2-relay/releases/download/v0.1.0/ngrok2-relay.linux.amd64.aci --set-env TARGET_HOST=127.54.32.1 --set-env TARGET_PORT=8001 --set-env NGROK_REGION=$ngrokRegion --set-env NOTIFY_URL=$notifyUrl -- --- https://github.com/dit4c/password-reverse-proxy/releases/download/v0.2.1/password-reverse-proxy.linux.amd64.aci --set-env LISTEN_HOST=127.54.32.1 --set-env LISTEN_PORT=8001 --set-env UPSTREAM_HOST=127.0.0.1 --set-env UPSTREAM_PORT=$containerPort --set-env PASSWORD_SECRET=$passwordSecret -- --- $containerImage'
+              - name: tail-urls-to-serial-tty.service
+                command: start
+                enable: yes
+                content: |
+                  [Unit]
+                  Description=Tail journald logs of URLs to /dev/ttyS0
+                  After=serial-getty@ttyS0.service
+                  [Service]
+                  Type=simple
+                  ExecStart=/bin/bash -c 'journalctl -f | grep ngrok2-relay | grep -o "https://.*$" > /dev/ttyS0'
           params:
             $containerImage: { get_param: ContainerImage }
+            $containerPort: { get_param: ContainerPort }
+            $ngrokRegion: { get_param: NgrokRegion }
+            $notifyUrl: { get_param: NotifyUrl }
+            $passwordSecret: { get_param: PasswordSecret }
 
 outputs:
   InstanceIP:
-    description: Public IP address of the newly created compute node.
+    description: IP address of the newly created compute node.
     value: { get_attr: [ComputeNodeInstance, first_address] }
