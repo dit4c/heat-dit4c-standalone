@@ -93,16 +93,36 @@ resources:
                   [Service]
                   Type=simple
                   ExecStart=/bin/bash -c 'rkt run --dns 8.8.8.8 --insecure-options image https://github.com/dit4c/ngrok2-relay/releases/download/v0.1.0/ngrok2-relay.linux.amd64.aci --set-env TARGET_HOST=127.54.32.1 --set-env TARGET_PORT=8001 --set-env NGROK_REGION=$ngrokRegion --set-env NOTIFY_URL=$notifyUrl -- --- https://github.com/dit4c/password-reverse-proxy/releases/download/v0.2.1/password-reverse-proxy.linux.amd64.aci --set-env LISTEN_HOST=127.54.32.1 --set-env LISTEN_PORT=8001 --set-env UPSTREAM_HOST=127.0.0.1 --set-env UPSTREAM_PORT=$containerPort --set-env PASSWORD_SECRET=$passwordSecret -- --- $containerImage'
-              - name: tail-urls-to-serial-tty.service
+              - name: serial-getty@ttyS0.service
                 command: start
                 enable: yes
                 content: |
+                  #  This file is part of systemd.
+                  #
+                  #  systemd is free software; you can redistribute it and/or modify it
+                  #  under the terms of the GNU Lesser General Public License as published by
+                  #  the Free Software Foundation; either version 2.1 of the License, or
+                  #  (at your option) any later version.
+
                   [Unit]
-                  Description=Tail journald logs of URLs to /dev/ttyS0
-                  After=serial-getty@ttyS0.service
+                  Description=Journal to /dev/%I
+                  BindsTo=dev-%i.device
+                  After=dev-%i.device systemd-user-sessions.service plymouth-quit-wait.service
+
                   [Service]
-                  Type=simple
-                  ExecStart=/bin/bash -c 'journalctl -f | grep ngrok2-relay | grep -o "https://.*$" > /dev/ttyS0'
+                  ExecStart=/bin/sh -c "exec /bin/journalctl -af > /dev/%I"
+                  Type=idle
+                  Restart=always
+                  UtmpIdentifier=%I
+                  TTYPath=/dev/%I
+                  TTYReset=yes
+                  TTYVHangup=yes
+                  KillMode=process
+                  IgnoreSIGPIPE=no
+                  SendSIGHUP=yes
+
+                  [Install]
+                  WantedBy=getty.target
           params:
             $containerImage: { get_param: ContainerImage }
             $containerPort: { get_param: ContainerPort }
