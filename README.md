@@ -1,8 +1,8 @@
 # Run DIT4C container images with OpenStack Heat
 
-[DIT4C][dit4c] has a lot of advantages for running research tools in the cloud. However, it also comes with a central administration cost.
+[DIT4C][dit4c] has a lot of advantages for running research tools in the cloud. However, it also comes with a central administration cost. Wouldn't it be to run a DIT4C container (which is just a normal Docker/AppC container that exposes all its functionality via HTTP) standalone in the cloud without needing DIT4C?
 
-This OpenStack Heat template allows you to run a DIT4C container by itself on a OpenStack Nova instance, allowing you to get some of the positives of DIT4C without needing a centrally-administered service.
+This OpenStack Heat template allows you to run a DIT4C container by itself on a OpenStack Nova instance, allowing you to get some of the positives of DIT4C without needing a centrally-administered service. It uses [ngrok2-relay][ngrok2-relay] & [password-reverse-proxy][password-reverse-proxy], forked from DIT4C helper images, to expose and protect a DIT4C container instance.
 
 As a starting point, it requires a CoreOS image to be available in OpenStack Glance. If you don't have one already, you [can upload one yourself][coreos-openstack].
 
@@ -27,3 +27,5 @@ Obviously, this is a far cry from [DIT4C][dit4c] itself, with its support for OA
 [ngrok.com]: https://ngrok.com/
 [rkt]: https://coreos.com/rkt/
 [dweet]: https://dweet.io/
+[ngrok2-relay]: https://github.com/dit4c/ngrok2-relay
+[password-reverse-proxy]: https://github.com/dit4c/password-reverse-proxy
