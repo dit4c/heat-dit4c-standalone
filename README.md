@@ -1,6 +1,6 @@
 # Run DIT4C container images with OpenStack Heat
 
-[DIT4C][dit4c] has a lot of advantages for running research tools in the cloud. However, it also comes with a central administration cost. Wouldn't it be to run a DIT4C container (which is just a normal Docker/AppC container that exposes all its functionality via HTTP) standalone in the cloud without needing DIT4C?
+[DIT4C][dit4c] has a lot of advantages for running research tools in the cloud. However, it also comes with a central administration cost. Wouldn't it be great to run a DIT4C container (which is just a normal Docker/AppC container that exposes all its functionality via HTTP) standalone in the cloud without needing DIT4C?
 
 This OpenStack Heat template allows you to run a DIT4C container by itself on a OpenStack Nova instance, allowing you to get some of the positives of DIT4C without needing a centrally-administered service. It uses [ngrok2-relay][ngrok2-relay] & [password-reverse-proxy][password-reverse-proxy], forked from DIT4C helper images, to expose and protect a DIT4C container instance.
 
@@ -16,7 +16,7 @@ The template takes the following inputs:
  * Container Port - which port does the container expose its HTTP functionality on? For all standard DIT4C containers, this is likely `8080`.
  * Password - your container is protected by a single fixed password prompt. Choose wisely.
  * Notify URL - Reading the instance logs to get the ngrok.com URL for the container can be tiresome. Include a valid URL here and the URL will be POST`ed when it's ready. [dweet.io][dweet] works well for this.
- * Key Name - you'll likely want an SSH key for the host, even if you don't plan to use it, in case your VM gets rebooted/or and you want to save your instance via `rkt export`.
+ * Key Name - you'll likely want an SSH key for the host, even if you don't plan to use it, in case your VM gets rebooted and/or you want to save your instance via `rkt export`.
 
 Note that because the instance is exposed via [ngrok.com][ngrok.com], it doesn't require a public IP address or any open ingress ports.
 
